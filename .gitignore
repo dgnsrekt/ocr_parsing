@@ -4,3 +4,10 @@ chromium-profile*/
 logs/
 
 .playwright-mcp
+
+# OCR test files
+batch_*.json
+test_images/
+image.png
+image2.png
+image3.png
