@@ -15,6 +15,8 @@ import argparse
 import base64
 import json
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -568,40 +570,124 @@ def mode_batch_processing(args):
         print(f"No images found in: {args.batch}")
         return
 
+    # Parse model instances if provided
+    model_instances = None
+    if args.model_instances:
+        model_instances = [m.strip() for m in args.model_instances.split(',')]
+        print(f"\nUsing {len(model_instances)} model instances: {', '.join(model_instances)}")
+
     print(f"\nFound {len(images)} images to process")
+    if args.parallel and args.parallel > 1:
+        print(f"Processing with {args.parallel} parallel workers")
+        if model_instances:
+            print(f"Distributing across {len(model_instances)} instances")
+    else:
+        print("Processing sequentially")
     print("=" * 70)
 
     results = {}
+    start_time = time.time()
 
-    for i, image_path in enumerate(images, 1):
-        print(f"\n[{i}/{len(images)}] Processing: {image_path.name}")
+    # Parallel processing
+    if args.parallel and args.parallel > 1:
+        # Counter for round-robin instance selection
+        instance_counter = [0]  # Using list to allow modification in nested function
 
-        try:
-            text = client.extract_text(
-                str(image_path),
-                model=args.model,
-                prompt=args.prompt,
-                temperature=args.temperature,
-                max_tokens=args.max_tokens,
-                preprocess=not args.no_preprocess,
-                max_image_size=args.max_size,
-                api_format=args.api_format
-            )
+        def process_single_image(image_path):
+            """Process a single image and return results."""
+            try:
+                # Select model instance using round-robin if available
+                if model_instances:
+                    model_id = model_instances[instance_counter[0] % len(model_instances)]
+                    instance_counter[0] += 1
+                else:
+                    model_id = args.model
 
-            results[image_path.name] = {
-                'success': True,
-                'text': text,
-                'length': len(text)
+                text = client.extract_text(
+                    str(image_path),
+                    model=model_id,
+                    prompt=args.prompt,
+                    temperature=args.temperature,
+                    max_tokens=args.max_tokens,
+                    preprocess=not args.no_preprocess,
+                    max_image_size=args.max_size,
+                    api_format=args.api_format
+                )
+                return image_path.name, {
+                    'success': True,
+                    'text': text,
+                    'length': len(text),
+                    'model_instance': model_id if model_instances else args.model
+                }
+            except Exception as e:
+                return image_path.name, {
+                    'success': False,
+                    'error': str(e)
+                }
+
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor(max_workers=args.parallel) as executor:
+            # Submit all tasks
+            future_to_image = {
+                executor.submit(process_single_image, img): img
+                for img in images
             }
 
-            print(f"  ✓ Extracted {len(text)} characters")
+            # Process completed tasks as they finish
+            completed = 0
+            for future in as_completed(future_to_image):
+                completed += 1
+                image_path = future_to_image[future]
 
-        except Exception as e:
-            results[image_path.name] = {
-                'success': False,
-                'error': str(e)
-            }
-            print(f"  ✗ Failed: {e}")
+                try:
+                    name, result = future.result()
+                    results[name] = result
+
+                    if result['success']:
+                        instance_info = f" ({result.get('model_instance', '')})" if model_instances else ""
+                        print(f"[{completed}/{len(images)}] ✓ {name}: {result['length']} characters{instance_info}")
+                    else:
+                        print(f"[{completed}/{len(images)}] ✗ {name}: {result['error']}")
+                except Exception as e:
+                    print(f"[{completed}/{len(images)}] ✗ {image_path.name}: {e}")
+                    results[image_path.name] = {
+                        'success': False,
+                        'error': str(e)
+                    }
+
+    # Sequential processing (original behavior)
+    else:
+        for i, image_path in enumerate(images, 1):
+            print(f"\n[{i}/{len(images)}] Processing: {image_path.name}")
+
+            try:
+                text = client.extract_text(
+                    str(image_path),
+                    model=args.model,
+                    prompt=args.prompt,
+                    temperature=args.temperature,
+                    max_tokens=args.max_tokens,
+                    preprocess=not args.no_preprocess,
+                    max_image_size=args.max_size,
+                    api_format=args.api_format
+                )
+
+                results[image_path.name] = {
+                    'success': True,
+                    'text': text,
+                    'length': len(text)
+                }
+
+                print(f"  ✓ Extracted {len(text)} characters")
+
+            except Exception as e:
+                results[image_path.name] = {
+                    'success': False,
+                    'error': str(e)
+                }
+                print(f"  ✗ Failed: {e}")
+
+    elapsed_time = time.time() - start_time
 
     # Save batch results
     output_file = args.output or "batch_ocr_results.json"
@@ -610,11 +696,15 @@ def mode_batch_processing(args):
 
     print("\n" + "=" * 70)
     print(f"Batch processing complete!")
+    print(f"Time elapsed: {elapsed_time:.2f} seconds")
     print(f"Results saved to: {output_file}")
 
     # Summary
     success_count = sum(1 for r in results.values() if r['success'])
     print(f"Successful: {success_count}/{len(images)}")
+    if args.parallel and args.parallel > 1:
+        avg_time = elapsed_time / len(images)
+        print(f"Average time per image: {avg_time:.2f} seconds")
 
 
 def mode_structured_extraction(args):
@@ -715,6 +805,8 @@ Examples:
                        help='LM Studio API base URL (default: http://llm1-studio.lan:1234/v1)')
     parser.add_argument('--model', type=str, default='deepseek-ocr',
                        help='Model name (default: deepseek-ocr)')
+    parser.add_argument('--model-instances', type=str, default=None,
+                       help='Comma-separated list of model instance IDs for parallel processing (e.g., deepseek-ocr-1,deepseek-ocr-2)')
     parser.add_argument('--prompt', type=str,
                        help='Custom extraction prompt')
     parser.add_argument('--temperature', type=float, default=0.0,
@@ -740,6 +832,8 @@ Examples:
     parser.add_argument('--api-format', type=str, default='auto',
                        choices=['auto', 'openai_standard', 'llama_cpp_vision', 'image_field', 'base64_only'],
                        help='API format to use (default: auto - tries all formats)')
+    parser.add_argument('--parallel', type=int, default=None, metavar='N',
+                       help='Process N images in parallel (batch mode only, default: sequential)')
 
     args = parser.parse_args()
 
