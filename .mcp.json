@@ -3,6 +3,19 @@
         "chromium": {
             "command": "./scripts/start-chromium-mcp.sh",
             "args": []
+        },
+        "codex": {
+            "command": "codex",
+            "args": [
+                "mcp-server"
+            ]
+        },
+        "gemini": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "gemini-mcp-tool"
+            ]
         }
     }
 }
