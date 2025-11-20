@@ -1,0 +1,23 @@
+{
+    "mcpServers": {
+        "chrome-devtools": {
+            "command": "npx",
+            "args": [
+                "chrome-devtools-mcp@latest"
+            ]
+        },
+        "codex": {
+            "command": "codex",
+            "args": [
+                "mcp-server"
+            ]
+        },
+        "gemini": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "gemini-mcp-tool"
+            ]
+        }
+    }
+}
