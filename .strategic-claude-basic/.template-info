@@ -1,18 +1,18 @@
 {
   "template": {
-    "id": "main",
-    "name": "Strategic Claude Basic",
-    "description": "Main template for general development projects with comprehensive Claude Code integration",
+    "id": "web-explorer",
+    "name": "Claude Web Explorer Template",
+    "description": "A template for browser automation projects using Chromium with MCP (Model Context Protocol) integration for Claude Code",
     "repo_url": "https://github.com/Fomo-Driven-Development/strategic-claude-base.git",
-    "branch": "main",
-    "commit": "0c3747dd81c69bad66c828175e358fa840e88227",
+    "branch": "web-explorer",
+    "commit": "1a91789daf511b8663e879c9e7e1f36755dfa2d6",
     "tags": [
-      "general",
-      "default"
+      "web",
+      "explorer"
     ]
   },
-  "installed_at": "2025-11-19T21:33:18-06:00",
-  "installed_commit": "0c3747dd81c69bad66c828175e358fa840e88227",
+  "installed_at": "2025-11-19T22:21:59-06:00",
+  "installed_commit": "1a91789daf511b8663e879c9e7e1f36755dfa2d6",
   "metadata": {
     "cli_version": "0.1.0",
     "installation_type": "cli"
